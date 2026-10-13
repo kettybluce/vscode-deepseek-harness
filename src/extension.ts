@@ -39,8 +39,10 @@ class HermesViewProvider implements vscode.WebviewViewProvider {
   private sessionId: string;
   private history: Record<string, HistoryEntry[]> = {};
   private readonly context: vscode.ExtensionContext;
+  private readonly extensionUri: vscode.Uri;
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
+    this.extensionUri = context.extensionUri;
     this.history = context.globalState.get<Record<string, HistoryEntry[]>>('hermesChat.history', {});
     this.sessionId = context.globalState.get<string>('hermesChat.lastSessionId') ?? `vscode-${Date.now().toString(36)}`;
   }

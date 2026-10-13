@@ -1,0 +1,10 @@
+node_modules/
+src/
+*.vsix
+.vsix-staging/
+.types/
+.node-types
+.typescript-local
+docs/
+.vscode/
+out/src/
