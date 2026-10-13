@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
 import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
+
+const execAsync = promisify(execFile);
 
 interface Message { role: 'system'|'user'|'assistant'; content: string }
 interface JsonRpcFrame { jsonrpc?: string; id?: string|number; method?: string; params?: any; result?: any; error?: { code?: number; message?: string; data?: unknown } }
@@ -51,10 +54,11 @@ class HermesViewProvider implements vscode.WebviewViewProvider {
     this.view = view;
     view.webview.options = { enableScripts: true, localResourceRoots: [this.extensionUri] };
     view.webview.html = this.html(view.webview);
-    void this.restoreHistory();
+    void this.initView();
     view.webview.onDidReceiveMessage(async (m) => {
       if (m.type === 'send') await this.send(m.id, m.text, m.messages);
       if (m.type === 'stop') this.stopRuntime();
+      if (m.type === 'saveConfig') await this.saveConfig(m);
       if (m.type === 'newSession') { this.sessionId = `vscode-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`; void this.context.globalState.update('hermesChat.lastSessionId', this.sessionId); this.post({ type: 'restore', sessionId: this.sessionId, messages: [] }); }
       if (m.type === 'openSettings') vscode.commands.executeCommand('workbench.action.openSettings', '@ext:local.hermes-chat');
       if (m.type === 'insert') await this.insertIntoEditor(m.text);
@@ -65,6 +69,63 @@ class HermesViewProvider implements vscode.WebviewViewProvider {
 
   private async restoreHistory() {
     this.post({ type: 'restore', sessionId: this.sessionId, messages: this.history[this.sessionId] ?? [] });
+  }
+
+  /** 首次打开先进入配置页；配置就绪后展示聊天并恢复历史。 */
+  private async initView() {
+    const cfg = vscode.workspace.getConfiguration('hermesChat');
+    if (!cfg.get<string>('dshPath', '') && !cfg.get<string>('endpoint', '')) {
+      const found = await this.detectDsh();
+      this.post({ type: 'showSetup', dshPath: found ?? '', model: cfg.get<string>('model', 'deepseek-v4-flash') });
+      return;
+    }
+    void this.restoreHistory();
+  }
+
+  /** 在当前环境探测 dsh 可执行文件（PATH + 常见安装位置，nvm 取版本最高的一个）。 */
+  private async detectDsh(): Promise<string | undefined> {
+    const candidates = new Set<string>();
+    try {
+      const { stdout } = await execAsync('command -v dsh || which dsh', { timeout: 5000 });
+      const p = stdout.trim();
+      if (p) candidates.add(p);
+    } catch { /* PATH 上没有 dsh */ }
+    const homes = [process.env.HOME, '/usr/local/bin', '/usr/bin'].filter(Boolean) as string[];
+    for (const home of homes) {
+      for (const p of [`${home}/.local/bin/dsh`, `${home}/bin/dsh`, `${home}/dsh`]) {
+        await fs.access(p, fs.constants.X_OK).then(() => candidates.add(p)).catch(() => undefined);
+      }
+    }
+    const nvmDir = `${process.env.HOME ?? ''}/.nvm/versions/node`;
+    try {
+      const versions = (await fs.readdir(nvmDir)).filter(v => v.startsWith('v')).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      for (const v of versions) {
+        const p = `${nvmDir}/${v}/bin/dsh`;
+        await fs.access(p, fs.constants.X_OK).then(() => candidates.add(p)).catch(() => undefined);
+        break; // 只取最新 node 版本下的 dsh
+      }
+    } catch { /* 无 nvm 目录 */ }
+    const [best] = [...candidates].sort((a, b) => {
+      const nvm = (p: string) => (p.includes('/.nvm/') ? 0 : 1);
+      return nvm(a) - nvm(b);
+    });
+    return best;
+  }
+
+  /** 保存面板配置页提交的设置；dshPath 留空则回落到自动探测结果。 */
+  private async saveConfig(m: { dshPath?: string; model?: string; provider?: string; endpoint?: string; apiKey?: string }) {
+    const cfg = vscode.workspace.getConfiguration('hermesChat');
+    const dshPath = (m.dshPath ?? '').trim() || await this.detectDsh() || '';
+    await cfg.update('dshPath', dshPath, vscode.ConfigurationTarget.Global);
+    if (m.model?.trim()) await cfg.update('model', m.model.trim(), vscode.ConfigurationTarget.Global);
+    if (m.provider?.trim()) await cfg.update('provider', m.provider.trim(), vscode.ConfigurationTarget.Global);
+    if (m.endpoint?.trim()) await cfg.update('endpoint', m.endpoint.trim(), vscode.ConfigurationTarget.Global);
+    if (m.apiKey) await cfg.update('apiKey', m.apiKey, vscode.ConfigurationTarget.Global);
+    const saved = dshPath
+      ? `已保存配置：dsh = ${dshPath}`
+      : '已保存配置，但未找到 dsh 可执行文件——请确认 DeepSeek Harness 已安装，或在下方 endpoint 填写 OpenAI 兼容地址。';
+    this.post({ type: 'configSaved', text: saved });
+    void this.restoreHistory();
   }
 
   private async persistHistory() {
@@ -337,7 +398,7 @@ class HermesViewProvider implements vscode.WebviewViewProvider {
     const nonce = Math.random().toString(36).slice(2);
     return `<!doctype html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';"><style>
       *{box-sizing:border-box}body{padding:0;margin:0;color:var(--vscode-foreground);font:13px var(--vscode-font-family);background:var(--vscode-sideBar-background)}header{height:42px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--vscode-widget-border);gap:8px;font-weight:600}.brand{font-size:14px;flex:1}.icon{background:none;border:0;color:var(--vscode-foreground);font-size:16px;cursor:pointer;padding:4px}.main{height:calc(100vh - 42px);display:flex;flex-direction:column}.messages{flex:1;overflow:auto;padding:12px 10px}.empty{text-align:center;opacity:.6;margin-top:35vh}.msg{margin:0 0 16px}.role{font-size:11px;text-transform:uppercase;opacity:.6;margin-bottom:4px}.bubble{white-space:pre-wrap;line-height:1.5;overflow-wrap:anywhere}.user .bubble{background:var(--vscode-textBlockQuote-background);padding:8px 10px;border-radius:8px}.assistant .bubble{padding:2px 0}.activity{margin:8px 0}.activity .bubble{border-left:2px solid var(--vscode-textLink-foreground);padding:4px 8px;color:var(--vscode-descriptionForeground);font-size:12px}.error{color:var(--vscode-errorForeground);white-space:pre-wrap}.composer{padding:8px;border-top:1px solid var(--vscode-widget-border)}textarea{width:100%;resize:none;min-height:60px;max-height:180px;border:1px solid var(--vscode-input-border);border-radius:8px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);padding:9px;font:inherit;outline:none}.bar{display:flex;align-items:center;margin-top:6px;gap:5px}.hint{opacity:.5;font-size:11px;flex:1}button.send{background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:0;border-radius:5px;padding:5px 12px;cursor:pointer}button.send:disabled{opacity:.5}code{font-family:var(--vscode-editor-font-family)}pre{background:var(--vscode-textCodeBlock-background);padding:8px;border-radius:5px;overflow:auto}
-    </style></head><body><header><span class="brand">Hermes Chat</span><button class="icon" id="new" title="New chat">＋</button><button class="icon" id="settings" title="Settings">⚙</button></header><div class="main"><div class="messages" id="messages"><div class="empty" id="empty">Ask your local model anything<br><small>Running in the VS Code WSL extension host</small></div></div><div class="composer"><textarea id="input" placeholder="Message Hermes…"></textarea><div class="bar"><span class="hint">Enter to send · Shift+Enter for newline</span><button class="send" id="stop" hidden>Stop</button><button class="send" id="send">Send</button></div></div></div><script nonce="${nonce}">
+    </style></head><body><header><span class="brand">Hermes Chat</span><button class="icon" id="new" title="New chat">＋</button><button class="icon" id="settings" title="Settings">⚙</button></header><div class="main"><div class="messages" id="messages"><div class="empty" id="empty">Ask your local model anything<br><small>Running in the VS Code WSL extension host</small></div></div><div class="composer"><textarea id="input" placeholder="Message Hermes…"></textarea><div class="bar"><span class="hint">Enter to send · Shift+Enter for newline</span><button class="send" id="stop" hidden>Stop</button><button class="send" id="send">Send</button></div></div></div><div id="setup" hidden style="position:absolute;inset:42px 0 0 0;overflow:auto;padding:18px 16px;background:var(--vscode-sideBar-background)"><h3 style="margin:0 0 4px;font-size:14px">配置 Hermes / DeepSeek Harness</h3><p style="opacity:.6;font-size:12px;margin:0 0 14px">首次使用请先配置模型运行时。dsh 留空将自动探测当前 WSL 中的安装。</p><label style="display:block;font-size:12px;margin-bottom:10px">dsh 可执行文件路径<input id="cfgDsh" placeholder="/home/you/.nvm/versions/node/vX/bin/dsh" style="display:block;width:100%;margin-top:4px;padding:7px;border:1px solid var(--vscode-input-border);border-radius:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:inherit"></label><label style="display:block;font-size:12px;margin-bottom:10px">模型<input id="cfgModel" placeholder="deepseek-v4-flash" style="display:block;width:100%;margin-top:4px;padding:7px;border:1px solid var(--vscode-input-border);border-radius:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:inherit"></label><label style="display:block;font-size:12px;margin-bottom:10px">Provider（官方 Harness 路由）<input id="cfgProvider" placeholder="deepseek-official" style="display:block;width:100%;margin-top:4px;padding:7px;border:1px solid var(--vscode-input-border);border-radius:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:inherit"></label><details style="font-size:12px;margin-bottom:12px"><summary style="cursor:pointer;opacity:.7">没有 dsh？改用 OpenAI 兼容接口（可选）</summary><label style="display:block;margin-top:8px">Endpoint<input id="cfgEndpoint" placeholder="http://127.0.0.1:8080/v1" style="display:block;width:100%;margin-top:4px;padding:7px;border:1px solid var(--vscode-input-border);border-radius:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:inherit"></label><label style="display:block;margin-top:8px">API Key<input id="cfgKey" type="password" placeholder="可选" style="display:block;width:100%;margin-top:4px;padding:7px;border:1px solid var(--vscode-input-border);border-radius:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:inherit"></label></details><div style="display:flex;align-items:center;gap:8px"><button class="send" id="cfgSave">保存并开始</button><span id="cfgMsg" style="font-size:12px;opacity:.7"></span></div></div><script nonce="${nonce}">
       const vscode=acquireVsCodeApi(); let messages=[], busy=false; const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       function render(role,text,cls=''){ $("empty").style.display='none'; const el=document.createElement('div'); el.className='msg '+role; el.innerHTML='<div class="role">'+(role==='user'?'You':'Hermes')+'</div><div class="bubble '+cls+'">'+esc(text)+'</div>'; if(role==='assistant'&&!cls){const action=document.createElement('button');action.className='icon';action.title='Insert into editor';action.textContent='↳';action.onclick=()=>vscode.postMessage({type:'insert',text:el.querySelector('.bubble').textContent||''});el.appendChild(action);} $('messages').appendChild(el); $('messages').scrollTop=999999; return el.querySelector('.bubble'); }
       function renderTodo(todos){const box=render('assistant',todos.map(t=>(t.status==='completed'?'☑ ':t.status==='in_progress'?'◉ ':'☐ ')+t.content).join('\n'),'activity');box.dataset.kind='todo';}
@@ -347,7 +408,8 @@ class HermesViewProvider implements vscode.WebviewViewProvider {
       $('send').onclick=send; $('stop').onclick=()=>vscode.postMessage({type:'stop'}); $('settings').onclick=()=>vscode.postMessage({type:'openSettings'}); $('new').onclick=()=>{messages=[];vscode.postMessage({type:'newSession'});$('messages').innerHTML='<div class="empty" id="empty">Ask your local model anything<br><small>Running in the VS Code WSL extension host</small></div>';}; $('input').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}};
       function activityText(m){const d=m.data||{};const tool=d.tool?.name||d.name;const command=d.command||d.commandLine||d.input?.command;const file=d.path||d.filePath||d.file?.path;const detail=tool?'Tool: '+tool:command?'Command: '+command:file?'File: '+file:d.reason?.kind?'Reason: '+d.reason.kind:'';return (m.eventType||'runtime').replaceAll('/',' · ')+(detail?'\n'+detail:'');}
       function restore(list){(list||[]).forEach(x=>render(x.role,x.content));}
-      window.onmessage=e=>{const m=e.data;if(m.type==='restore'){restore(m.messages);} if(m.type==='externalPrompt'){$('input').value=m.text||'';$('input').focus();} if(m.type==='delta'&&window.current){window.current.textContent+=m.text;$('messages').scrollTop=999999;} if(m.type==='activity')render('assistant',activityText(m),'activity'); if(m.type==='todo')renderTodo(m.todos||[]); if(m.type==='approval')renderApproval(m.request||{}); if(m.type==='changedFiles'){const box=render('assistant','Changed files:\n'+m.files.join('\n'),'activity');m.files.forEach(f=>{const b=document.createElement('button');b.textContent='Diff '+f;b.className='send';b.onclick=()=>vscode.postMessage({type:'showDiff',path:f});box.appendChild(b);});} if(m.type==='updateStatus')render('assistant',m.text,'activity'); if(m.type==='runtimeLog')render('assistant','Runtime\n'+m.text,'activity'); if(m.type==='assistantEnd'&&window.current){messages.push({role:'assistant',content:window.current.textContent});setBusy(false);} if(m.type==='stopped'){setBusy(false);} if(m.type==='error'){if(window.current){window.current.className='bubble error';window.current.textContent=m.error;}else render('assistant',m.error,'error');setBusy(false);}};
+      window.onmessage=e=>{const m=e.data;if(m.type==='restore'){restore(m.messages);} if(m.type==='showSetup'){$('setup').hidden=false;if(m.dshPath)$('cfgDsh').value=m.dshPath;if(m.model)$('cfgModel').value=m.model;} if(m.type==='configSaved'){$('cfgMsg').textContent=m.text||'已保存';setTimeout(()=>{$('setup').hidden=true;$('cfgMsg').textContent='';},1800);} if(m.type==='externalPrompt'){$('input').value=m.text||'';$('input').focus();} if(m.type==='delta'&&window.current){window.current.textContent+=m.text;$('messages').scrollTop=999999;} if(m.type==='activity')render('assistant',activityText(m),'activity'); if(m.type==='todo')renderTodo(m.todos||[]); if(m.type==='approval')renderApproval(m.request||{}); if(m.type==='changedFiles'){const box=render('assistant','Changed files:\n'+m.files.join('\n'),'activity');m.files.forEach(f=>{const b=document.createElement('button');b.textContent='Diff '+f;b.className='send';b.onclick=()=>vscode.postMessage({type:'showDiff',path:f});box.appendChild(b);});} if(m.type==='updateStatus')render('assistant',m.text,'activity'); if(m.type==='runtimeLog')render('assistant','Runtime\n'+m.text,'activity'); if(m.type==='assistantEnd'&&window.current){messages.push({role:'assistant',content:window.current.textContent});setBusy(false);} if(m.type==='stopped'){setBusy(false);} if(m.type==='error'){if(window.current){window.current.className='bubble error';window.current.textContent=m.error;}else render('assistant',m.error,'error');setBusy(false);}};
+      $('cfgSave').onclick=()=>vscode.postMessage({type:'saveConfig',dshPath:$('cfgDsh').value,model:$('cfgModel').value,provider:$('cfgProvider').value,endpoint:$('cfgEndpoint').value,apiKey:$('cfgKey').value});
     </script></body></html>`;
   }
 }
