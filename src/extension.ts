@@ -124,12 +124,9 @@ class HermesHostProvider implements vscode.WebviewViewProvider {
 
   private postUrl() {
     if (!this.readyUrl) return;
-    // webview 由 Windows 侧渲染；dsh 只绑 WSL 回环，统一改用 localhost 走 WSL2 端口转发
-    const inWsl = Boolean(process.env.WSL_DISTRO_NAME);
-    const url = inWsl || process.platform === 'win32'
-      ? this.readyUrl.replace('://127.0.0.1:', '://localhost:')
-      : this.readyUrl;
-    this.post({ type: 'url', url });
+    // 实测（2026-10-15）：dsh 只绑 WSL 侧 127.0.0.1（IPv4 回环），WSL2 localhost 转发让
+    // Windows 侧 127.0.0.1 直达；改写成 localhost 反而会先撞 IPv6 ::1 超时。原样使用。
+    this.post({ type: 'url', url: this.readyUrl });
   }
 
   /** 按配置解析 dsh 的启动方式；Windows 宿主 + wsl 模式经 wsl.exe 转发。 */
