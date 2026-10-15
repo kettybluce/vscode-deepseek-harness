@@ -1,10 +1,16 @@
 # DeepSeek Harness for VS Code
 
-Windows-first VS Code chat client for the official open-source DeepSeek Harness. The extension keeps the VS Code UI native (activity-bar chat, editor context actions, streaming activity) and launches the official `dsh --profile sdk` JSON-RPC runtime in WSL or Windows.
+Windows-first VS Code host for the official open-source DeepSeek Harness. The extension embeds the **official Harness web UI — the same React interface that ships inside the DeepSeek desktop app** — in a native activity-bar panel, and launches the official `dsh --profile web` runtime in WSL or Windows.
 
 ## How it works
 
-The extension does not reimplement the model runtime and does not bundle model weights. It starts the `dsh` executable you configure, performs the official SDK handshake, sends `session/prompt`, consumes `session.event`/`session.status` notifications, and waits with `session/wait`. This is the same SDK boundary used by the official desktop application and keeps runtime upgrades in the cloned Harness installation.
+The extension does not reimplement any chat UI and does not bundle model weights or the Harness itself. It:
+
+1. spawns the official `dsh --profile web` server (the desktop app's own renderer backend),
+2. parses the tokenized local URL from its stdout,
+3. loads that URL inside the panel webview.
+
+Sessions, approvals, file trees, model settings — everything you see is the official desktop interface, driven by the official Harness runtime. Runtime upgrades stay in the cloned Harness installation.
 
 ## Windows + WSL setup
 
@@ -12,14 +18,14 @@ The extension does not reimplement the model runtime and does not bundle model w
 
    ```bash
    dsh --version
-   dsh --profile sdk
+   dsh --profile web --no-open
    ```
 
 2. Install the generated `.vsix` in Windows VS Code.
 3. Open a Windows or Remote-WSL workspace.
-4. Run **Hermes: Configure Harness** and set `hermesChat.runtime` to `auto`, `wsl`, or `windows`; configure `dshPath`, optional `wslDistribution`, and normally leave `dshArgs` as `["--profile", "sdk"]`.
+4. Optional: run **Hermes: Configure Harness** to set `hermesChat.runtime` (`auto` / `wsl` / `windows`), `hermesChat.dshPath`, `hermesChat.wslDistribution`, and `hermesChat.webPort` (0 = OS-picked free port).
 
-For a Windows VS Code extension host, `runtime: wsl` launches through `wsl.exe`. For a Remote-WSL extension host, `dsh` is launched directly inside WSL. The active workspace, file, language, and selected code are added to the prompt context.
+For a Windows extension host with `runtime: wsl`, `dsh` is launched through `wsl.exe`. For a Remote-WSL extension host, `dsh` is launched directly inside WSL. On a Windows host the panel rewrites `127.0.0.1` to `localhost` so WSL-bound loopback ports remain reachable.
 
 ## Build and install
 
@@ -27,25 +33,15 @@ For a Windows VS Code extension host, `runtime: wsl` launches through `wsl.exe`.
 npm install
 npm run compile
 npm run package
-code --install-extension ./hermes-chat-0.1.0.vsix
+code --install-extension ./hermes-chat-0.2.0.vsix
 ```
 
-The official Harness repository is intentionally kept outside the extension bundle; configure its installed `dsh` path so the runtime can upgrade independently.
+The official Harness repository is intentionally kept outside the extension bundle (`docs/` is excluded from the vsix); configure its installed `dsh` path so the runtime can upgrade independently.
 
-## VS Code features
+## Panel controls
 
-- Native activity-bar chat panel with streaming assistant output.
-- New session and stop controls.
-- Runtime/tool/file activity summaries from official Harness events.
-- Todo/Plan snapshots from `todo/write` events.
-- Changed-file cards with VS Code `vscode.diff` baselines when Git is available.
-- Native VS Code terminal launcher for the Harness workspace.
-- Session history persisted in VS Code global state and restored when the chat opens.
-- Active editor and selection context.
-- **Hermes: Explain Selection** from the editor context menu.
-- WSL or Windows executable configuration.
-- Optional legacy OpenAI-compatible endpoint for installations without `dsh`; the official SDK path is preferred whenever configured.
+- **⟳ 重新连接** / **Hermes: Restart Harness Runtime** — stop the current `dsh web` process and start a fresh one.
+- **↗ 在浏览器打开** / **Hermes: Open in Browser** — open the same tokenized URL in the system browser for a full-window desktop-app experience.
+- **⚙ 设置** / **Hermes: Configure Harness** — open the extension settings.
 
-The Harness SDK has no wire-level prompt cancellation. Stop therefore closes the runtime process; the next request starts a fresh SDK runtime, matching the official client lifecycle semantics.
-
-The official SDK JSON-RPC profile currently exposes no approval-decision RPC and no desktop updater RPC. Approval requests are displayed fail-closed in the panel; configure the official Harness host's answerer/policy for decisions. **Hermes: Check Harness Runtime** reports the installed `dsh` version and leaves upgrades to the official Harness installer/repository, so the extension cannot silently replace your runtime.
+Startup diagnostics surface the last lines of `dsh` stderr in the panel when the runtime fails to start, and when the runtime exits the panel offers a one-click retry.

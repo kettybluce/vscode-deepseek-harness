@@ -1,8 +1,8 @@
 {
   "name": "hermes-chat",
   "displayName": "Hermes Chat",
-  "description": "Codex-style VS Code client for the official DeepSeek Harness running on Windows or WSL.",
-  "version": "0.1.1",
+  "description": "Embeds the official DeepSeek Harness web UI (same interface as the desktop app) inside VS Code, running on Windows or WSL.",
+  "version": "0.2.0",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -15,7 +15,8 @@
     "onView:hermesChatView",
     "onCommand:hermesChat.open",
     "onCommand:hermesChat.configure",
-    "onCommand:hermesChat.explainSelection"
+    "onCommand:hermesChat.restart",
+    "onCommand:hermesChat.openInBrowser"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -29,39 +30,14 @@
         "title": "Hermes: Configure Harness"
       },
       {
-        "command": "hermesChat.explainSelection",
-        "title": "Hermes: Explain Selection"
+        "command": "hermesChat.restart",
+        "title": "Hermes: Restart Harness Runtime"
       },
       {
-        "command": "hermesChat.openTerminal",
-        "title": "Hermes: Open Terminal"
-      },
-      {
-        "command": "hermesChat.checkUpdates",
-        "title": "Hermes: Check Harness Runtime"
+        "command": "hermesChat.openInBrowser",
+        "title": "Hermes: Open in Browser"
       }
     ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "hermesChat.explainSelection",
-          "when": "editorTextFocus",
-          "group": "hermes@1"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "hermesChat.explainSelection",
-          "when": "editorTextFocus"
-        },
-        {
-          "command": "hermesChat.openTerminal"
-        },
-        {
-          "command": "hermesChat.checkUpdates"
-        }
-      ]
-    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -91,7 +67,7 @@
             "windows"
           ],
           "default": "auto",
-          "description": "Where to launch the official DeepSeek Harness."
+          "description": "Where to launch the official DeepSeek Harness web runtime."
         },
         "hermesChat.wslDistribution": {
           "type": "string",
@@ -103,64 +79,10 @@
           "default": "",
           "description": "Path or command for the official dsh executable inside the selected runtime. Empty uses dsh on PATH."
         },
-        "hermesChat.dshArgs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [
-            "--profile",
-            "sdk"
-          ],
-          "description": "Arguments passed to dsh. The default starts the official SDK JSON-RPC stdio bridge."
-        },
-        "hermesChat.autoUpdate": {
-          "type": "boolean",
-          "default": false,
-          "description": "Check for Harness updates, but never replace a working runtime without confirmation."
-        },
-        "hermesChat.endpoint": {
-          "type": "string",
-          "default": "",
-          "description": "Optional legacy OpenAI-compatible endpoint. Used only when no dsh process is configured."
-        },
-        "hermesChat.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Optional API key.",
-          "scope": "machine-overridable"
-        },
-        "hermesChat.model": {
-          "type": "string",
-          "default": "deepseek-v4-flash",
-          "description": "Model identifier sent to the official Harness provider route."
-        },
-        "hermesChat.provider": {
-          "type": "string",
-          "default": "deepseek-official",
-          "description": "Harness provider route used during initialize."
-        },
-        "hermesChat.reasoningEffort": {
-          "type": "string",
-          "default": "",
-          "description": "Optional Harness reasoning effort (for example low, medium, high, or max)."
-        },
-        "hermesChat.systemPrompt": {
-          "type": "string",
-          "default": "You are a helpful coding assistant. Be concise, show safe commands, and explain changes before applying them.",
-          "description": "Default system prompt."
-        },
-        "hermesChat.temperature": {
+        "hermesChat.webPort": {
           "type": "number",
-          "default": 0.2,
-          "minimum": 0,
-          "maximum": 2
-        },
-        "hermesChat.maxTokens": {
-          "type": "number",
-          "default": 4096,
-          "minimum": 128,
-          "maximum": 32768
+          "default": 0,
+          "description": "Fixed port for the Harness web runtime. 0 lets the OS pick a free port."
         }
       }
     }
