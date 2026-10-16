@@ -2,7 +2,7 @@
   "name": "hermes-chat",
   "displayName": "Hermes Chat",
   "description": "Embeds the official DeepSeek Harness web UI (same interface as the desktop app) inside VS Code, running on Windows or WSL.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -12,7 +12,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:hermesChatView",
+    "onView:hermesLauncher",
     "onCommand:hermesChat.open",
     "onCommand:hermesChat.configure",
     "onCommand:hermesChat.restart",
@@ -50,9 +50,8 @@
     "views": {
       "hermes": [
         {
-          "id": "hermesChatView",
-          "name": "Chat",
-          "type": "webview"
+          "id": "hermesLauncher",
+          "name": "Harness 桌面版"
         }
       ]
     },
