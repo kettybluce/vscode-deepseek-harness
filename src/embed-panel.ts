@@ -120,7 +120,9 @@ export class EmbedHost implements vscode.Disposable {
       "default-src 'none'",
       `frame-src ${frameOrigin}`,
       `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
+      `script-src 'nonce-${nonce}' ${webview.cspSource}`,
+      `img-src ${webview.cspSource} data:`,
+      `font-src ${webview.cspSource}`,
     ].join('; ');
 
     return `<!DOCTYPE html>
