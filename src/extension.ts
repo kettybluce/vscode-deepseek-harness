@@ -268,31 +268,38 @@ class EmbedController implements vscode.Disposable {
     const c = cfg();
     const items: vscode.TreeItem[] = [];
     if (this.state) {
-      const label = this.external
-        ? `● 附着中 · ${fixedAddress(this.state.port)}（外部实例）`
-        : `● 运行中 · ${fixedAddress(this.state.port)}（pid ${this.state.pid}）`;
-      const status = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+      const status = new vscode.TreeItem(
+        this.external ? '附着中' : '运行中',
+        vscode.TreeItemCollapsibleState.None,
+      );
+      status.description = `${fixedAddress(this.state.port)}${this.external ? ' · 外部实例' : ` · pid ${this.state.pid}`}`;
+      status.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.green'));
       status.tooltip = this.external
         ? '该 dsh 由其它入口启动（通常是正式版 Hermes Chat），本扩展只读复用，不会停止它'
         : '本扩展守护化启动的实例';
       items.push(status);
-      items.push(this.button('$(window) 在 VS Code 内嵌打开', 'hermesEmbed.open'));
-      items.push(this.button('$(browser) 在浏览器打开', 'hermesEmbed.openInBrowser'));
-      items.push(this.button('$(link) 复制固定地址', 'hermesEmbed.copyAddress'));
-      if (!this.external) items.push(this.button('$(debug-stop) 停止（本扩展实例）', 'hermesEmbed.stop'));
+      items.push(this.button('window', '在 VS Code 内嵌打开', 'hermesEmbed.open', '推荐'));
+      items.push(this.button('globe', '在浏览器打开', 'hermesEmbed.openInBrowser'));
+      items.push(this.button('link', '复制固定地址', 'hermesEmbed.copyAddress'));
+      if (!this.external) items.push(this.button('debug-stop', '停止运行时', 'hermesEmbed.stop', '仅本扩展实例'));
     } else {
-      const status = new vscode.TreeItem(`○ 未运行 · 端口 ${c.webPort || '自动'}`, vscode.TreeItemCollapsibleState.None);
+      const status = new vscode.TreeItem('未运行', vscode.TreeItemCollapsibleState.None);
+      status.description = `端口 ${c.webPort || '自动'}`;
+      status.iconPath = new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'));
       status.tooltip = '点击打开：探测到已有实例会直接附着，否则自动启动';
       items.push(status);
-      items.push(this.button('$(window) 在 VS Code 内嵌打开（自动启动）', 'hermesEmbed.open'));
-      items.push(this.button('$(play) 仅启动运行时', 'hermesEmbed.launch'));
+      items.push(this.button('window', '在 VS Code 内嵌打开', 'hermesEmbed.open', '自动启动'));
+      items.push(this.button('play', '仅启动运行时', 'hermesEmbed.launch'));
     }
-    items.push(this.button(`$(gear) 设置${this.version ? `（dsh ${this.version}）` : ''}`, 'hermesEmbed.configure'));
+    items.push(this.button('gear', '设置', 'hermesEmbed.configure', this.version ? `dsh ${this.version}` : undefined));
     return items;
   }
 
-  private button(label: string, command: string): vscode.TreeItem {
+  /** 统一按钮渲染：图标走 ThemeIcon（TreeItem.label 里的 $(...) 不会渲染），右侧放说明。 */
+  private button(icon: string, label: string, command: string, description?: string): vscode.TreeItem {
     const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+    item.iconPath = new vscode.ThemeIcon(icon);
+    if (description) item.description = description;
     item.command = { command, title: label };
     return item;
   }

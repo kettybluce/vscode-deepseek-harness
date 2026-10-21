@@ -2,7 +2,7 @@
   "name": "hermes-embed",
   "displayName": "DSH",
   "description": "实验分支：把 DeepSeek Harness（DSH）的完整 Web 界面内嵌到 VS Code 编辑器区。与正式版 Hermes Chat 并存的独立扩展，互不覆盖。",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "local",
   "license": "MIT",
   "engines": {
