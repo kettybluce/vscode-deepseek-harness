@@ -63,7 +63,7 @@ export class EmbedHost implements vscode.Disposable {
 
     const panel = vscode.window.createWebviewPanel(
       VIEW_TYPE,
-      'Hermes',
+      'DSH',
       { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
       {
         enableScripts: true,

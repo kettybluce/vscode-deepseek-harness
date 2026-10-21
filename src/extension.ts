@@ -8,7 +8,7 @@ import {
 import { EmbedHost } from './embed-panel';
 
 /**
- * Hermes Embed —— 实验分支：把 DeepSeek Harness 的完整 Web 界面内嵌到
+ * DSH —— 实验分支：把 DeepSeek Harness 的完整 Web 界面内嵌到
  * VS Code 编辑器区（形态对齐 Claude Code / Codex 的扩展面板）。
  *
  * 与正式版 Hermes Chat 的隔离（重要）：
@@ -52,7 +52,7 @@ function resolveMode(c: LaunchConfig): Plan['mode'] {
 }
 
 class EmbedController implements vscode.Disposable {
-  private readonly out = vscode.window.createOutputChannel('Hermes Embed', { log: true });
+  private readonly out = vscode.window.createOutputChannel('DSH', { log: true });
   private readonly treeEmitter = new vscode.EventEmitter<void>();
   readonly onTreeChanged = this.treeEmitter.event;
   private readonly status: vscode.StatusBarItem;
@@ -163,7 +163,7 @@ class EmbedController implements vscode.Disposable {
       return true;
     } catch (e: any) {
       this.log(`启动失败：${e?.message ?? e}`);
-      void vscode.window.showErrorMessage(`Hermes Embed 启动失败：${e?.message ?? e}（详见输出面板 "Hermes Embed"）`);
+      void vscode.window.showErrorMessage(`DSH 启动失败：${e?.message ?? e}（详见输出面板 "DSH"）`);
       this.state = null;
       writeState(this.stateFile(), null);
       this.render();
@@ -176,33 +176,33 @@ class EmbedController implements vscode.Disposable {
 
   /** 主操作：在编辑器区打开内嵌窗口。 */
   async open() {
-    if (this.busy) { void vscode.window.showInformationMessage('Hermes Embed 正在启动运行时，请稍候。'); return; }
+    if (this.busy) { void vscode.window.showInformationMessage('DSH 正在启动运行时，请稍候。'); return; }
     try {
       if (!(await this.ensureRuntime())) return;
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Hermes Embed：正在打开内嵌窗口' },
+        { location: vscode.ProgressLocation.Notification, title: 'DSH：正在打开内嵌窗口' },
         async () => { await this.embed.show(); },
       );
     } catch (e: any) {
       this.log(`打开内嵌窗口失败：${e?.message ?? e}`);
-      void vscode.window.showErrorMessage(`Hermes Embed 打开内嵌窗口失败：${e?.message ?? e}`);
+      void vscode.window.showErrorMessage(`DSH 打开内嵌窗口失败：${e?.message ?? e}`);
     }
   }
 
   /** 显式启动（侧边栏按钮）。 */
   async launch() {
     if (this.busy) return;
-    if (this.state) { void vscode.window.showInformationMessage('Hermes Embed：运行时已在运行。'); return; }
+    if (this.state) { void vscode.window.showInformationMessage('DSH：运行时已在运行。'); return; }
     await this.ensureRuntime();
   }
 
   /** 只停本扩展自己启动的实例；附着的外部实例一律不动。 */
   async stop() {
     if (this.busy) return;
-    if (!this.state) { void vscode.window.showInformationMessage('Hermes Embed：本扩展没有在管理的运行时。'); return; }
+    if (!this.state) { void vscode.window.showInformationMessage('DSH：本扩展没有在管理的运行时。'); return; }
     if (this.external) {
       void vscode.window.showWarningMessage(
-        'Hermes Embed：当前附着的是外部启动的 dsh（通常来自正式版 Hermes Chat），本扩展不会停止它。请在正式版里停止。',
+        'DSH：当前附着的是外部启动的 dsh（通常来自正式版 Hermes Chat），本扩展不会停止它。请在正式版里停止。',
       );
       return;
     }
@@ -213,7 +213,7 @@ class EmbedController implements vscode.Disposable {
       await stopDaemon(plan, state.pid);
       this.log(`已停止 pid ${state.pid}`);
     } catch (e: any) {
-      void vscode.window.showErrorMessage(`Hermes Embed 停止失败：${e?.message ?? e}`);
+      void vscode.window.showErrorMessage(`DSH 停止失败：${e?.message ?? e}`);
     } finally {
       this.state = null;
       writeState(this.stateFile(), null);
@@ -223,7 +223,7 @@ class EmbedController implements vscode.Disposable {
   }
 
   async openInBrowser() {
-    if (!this.state) { void vscode.window.showInformationMessage('Hermes Embed：运行时未启动。'); return; }
+    if (!this.state) { void vscode.window.showInformationMessage('DSH：运行时未启动。'); return; }
     await vscode.env.openExternal(vscode.Uri.parse(this.state.url || fixedAddress(this.state.port)));
   }
 
@@ -248,11 +248,11 @@ class EmbedController implements vscode.Disposable {
     const port = this.state?.port ?? c.webPort;
     this.status.text = this.state
       ? this.external
-        ? `$(window) Hermes Embed:${port}`
-        : `$(window) Hermes Embed:${port} ●`
+        ? `$(window) DSH:${port}`
+        : `$(window) DSH:${port} ●`
       : this.busy
-        ? '$(loading~spin) Hermes Embed'
-        : '$(window) Hermes Embed';
+        ? '$(loading~spin) DSH'
+        : '$(window) DSH';
     this.status.tooltip = this.state
       ? new vscode.MarkdownString(
           `${this.external ? '附着到外部实例' : '本扩展启动'}：dsh web（端口 ${port}）\n\n点击在 VS Code 内嵌打开`,

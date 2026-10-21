@@ -1,8 +1,8 @@
 {
   "name": "hermes-embed",
-  "displayName": "Hermes Embed（内嵌实验）",
-  "description": "实验分支：把 DeepSeek Harness 的完整 Web 界面内嵌到 VS Code 编辑器区。与正式版 Hermes Chat 并存的独立扩展，互不覆盖。",
-  "version": "0.5.0",
+  "displayName": "DSH",
+  "description": "实验分支：把 DeepSeek Harness（DSH）的完整 Web 界面内嵌到 VS Code 编辑器区。与正式版 Hermes Chat 并存的独立扩展，互不覆盖。",
+  "version": "0.5.1",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -25,34 +25,34 @@
     "commands": [
       {
         "command": "hermesEmbed.open",
-        "title": "Hermes Embed: 在 VS Code 内嵌打开"
+        "title": "DSH: 在 VS Code 内嵌打开"
       },
       {
         "command": "hermesEmbed.launch",
-        "title": "Hermes Embed: 启动运行时"
+        "title": "DSH: 启动运行时"
       },
       {
         "command": "hermesEmbed.stop",
-        "title": "Hermes Embed: 停止本扩展启动的运行时"
+        "title": "DSH: 停止本扩展启动的运行时"
       },
       {
         "command": "hermesEmbed.openInBrowser",
-        "title": "Hermes Embed: 在浏览器打开"
+        "title": "DSH: 在浏览器打开"
       },
       {
         "command": "hermesEmbed.copyAddress",
-        "title": "Hermes Embed: 复制固定地址"
+        "title": "DSH: 复制固定地址"
       },
       {
         "command": "hermesEmbed.configure",
-        "title": "Hermes Embed: 设置"
+        "title": "DSH: 设置"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "hermesEmbed",
-          "title": "Hermes Embed",
+          "title": "DSH",
           "icon": "media/hermes.svg"
         }
       ]
@@ -61,12 +61,12 @@
       "hermesEmbed": [
         {
           "id": "hermesEmbedLauncher",
-          "name": "内嵌承载（实验）"
+          "name": "DSH"
         }
       ]
     },
     "configuration": {
-      "title": "Hermes Embed（实验）",
+      "title": "DSH（实验）",
       "properties": {
         "hermesEmbed.webPort": {
           "type": "number",

@@ -241,17 +241,105 @@ export async function startEmbedProxy(opts: EmbedProxyOptions): Promise<EmbedPro
     })();
   });
 
-  // dsh 当前版本的 RPC 是纯 HTTP（无 WebSocket）；若未来出现升级请求，明确拒绝而不是挂起。
-  server.on('upgrade', (_req: http.IncomingMessage, socket: Socket) => {
-    socket.destroy();
-  });
-
   // 记录活动连接：Electron/Chrome 会保持 keep-alive，server.close() 不会自己断开它们，
   // 不主动销毁会导致关了面板后端口仍被占、下次打开分配不到同一端口。
   const sockets = new Set<Socket>();
   server.on('connection', (socket: Socket) => {
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
+  });
+
+  /**
+   * WebSocket：dsh 在 `/api/remote.mux` 上跑一个「流复用」通道（RemoteStreamMuxServer），
+   * 承载实时事件流。少了它界面会一直停在「重新连接中」，所以必须做 upgrade 隧道。
+   * 同样要过信任栅栏，因此复用 buildHeaders 的 Host/Origin/Sec-Fetch-Site 改写与 cookie 注入。
+   */
+  const rejected = (socket: Socket, status: number) => {
+    const body = status === 401 ? 'unauthorized' : 'forbidden';
+    socket.write(
+      `HTTP/1.1 ${status} ${status === 401 ? 'Unauthorized' : 'Forbidden'}\r\n` +
+        'content-type: text/plain\r\n' +
+        `content-length: ${Buffer.byteLength(body)}\r\n` +
+        'connection: close\r\n\r\n' +
+        body,
+    );
+    socket.destroy();
+  };
+
+  const tunnelUpgrade = (req: http.IncomingMessage, socket: Socket, head: Buffer, auth: AuthCookie | null) => {
+    const headers = buildHeaders(req.headers, auth);
+    // buildHeaders 会按逐跳规则剔掉 connection/upgrade，这里补回来才能触发上游 upgrade。
+    headers.connection = 'Upgrade';
+    headers.upgrade = String(req.headers.upgrade ?? 'websocket');
+
+    const upstream = http.request({
+      host: '127.0.0.1',
+      port: targetPort,
+      method: req.method,
+      path: req.url,
+      headers,
+    });
+
+    let settled = false;
+
+    upstream.on('upgrade', (upRes, upSocket: Socket, upHead: Buffer) => {
+      settled = true;
+      sockets.add(upSocket);
+      upSocket.on('close', () => sockets.delete(upSocket));
+
+      // 原样回写 101 握手响应（含 sec-websocket-accept 等）。
+      const lines = [`HTTP/1.1 ${upRes.statusCode} ${upRes.statusMessage}`];
+      for (let i = 0; i < upRes.rawHeaders.length; i += 2) {
+        lines.push(`${upRes.rawHeaders[i]}: ${upRes.rawHeaders[i + 1]}`);
+      }
+      socket.write(lines.join('\r\n') + '\r\n\r\n');
+      if (upHead?.length) socket.write(upHead);
+      if (head?.length) upSocket.write(head);
+
+      socket.pipe(upSocket);
+      upSocket.pipe(socket);
+      socket.on('error', () => upSocket.destroy());
+      upSocket.on('error', () => socket.destroy());
+      upstream.on('error', () => {/* 握手完成后由 socket 管道各自处理 */});
+    });
+
+    // 上游拒绝升级（通常是栅栏 401/403）：把状态透回去，避免浏览器一直等。
+    upstream.on('response', (upRes) => {
+      settled = true;
+      const chunks: Buffer[] = [];
+      upRes.on('data', (c: Buffer) => chunks.push(c));
+      upRes.on('end', () => {
+        const lines = [`HTTP/1.1 ${upRes.statusCode} ${upRes.statusMessage}`];
+        for (let i = 0; i < upRes.rawHeaders.length; i += 2) {
+          const key = upRes.rawHeaders[i].toLowerCase();
+          if (key === 'set-cookie') continue;
+          lines.push(`${upRes.rawHeaders[i]}: ${upRes.rawHeaders[i + 1]}`);
+        }
+        socket.write(lines.join('\r\n') + '\r\n\r\n');
+        socket.write(Buffer.concat(chunks));
+        socket.destroy();
+      });
+    });
+
+    upstream.on('error', () => {
+      if (!settled) rejected(socket, 502);
+    });
+    upstream.end();
+  };
+
+  server.on('upgrade', (req: http.IncomingMessage, socket: Socket, head: Buffer) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+    void (async () => {
+      try {
+        let auth = cookie;
+        if (!auth) auth = await refreshCookie();
+        if (!auth) { rejected(socket, 401); return; }
+        tunnelUpgrade(req, socket, head, auth);
+      } catch {
+        rejected(socket, 502);
+      }
+    })();
   });
 
   const listen = (port: number): Promise<number> =>
