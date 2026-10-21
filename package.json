@@ -1,8 +1,8 @@
 {
-  "name": "hermes-chat",
-  "displayName": "Hermes Chat",
-  "description": "One-click launcher for the official DeepSeek Harness web runtime in WSL: daemonized start on a fixed port, browser-open, and in-place dsh upgrade.",
-  "version": "0.4.0",
+  "name": "hermes-embed",
+  "displayName": "Hermes Embed（内嵌实验）",
+  "description": "实验分支：把 DeepSeek Harness 的完整 Web 界面内嵌到 VS Code 编辑器区。与正式版 Hermes Chat 并存的独立扩展，互不覆盖。",
+  "version": "0.5.0",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -12,78 +12,78 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:hermesLauncher",
-    "onCommand:hermesChat.launch",
-    "onCommand:hermesChat.stop",
-    "onCommand:hermesChat.restart",
-    "onCommand:hermesChat.openInBrowser",
-    "onCommand:hermesChat.copyAddress",
-    "onCommand:hermesChat.upgrade",
-    "onCommand:hermesChat.configure"
+    "onView:hermesEmbedLauncher",
+    "onCommand:hermesEmbed.open",
+    "onCommand:hermesEmbed.openInBrowser",
+    "onCommand:hermesEmbed.copyAddress",
+    "onCommand:hermesEmbed.launch",
+    "onCommand:hermesEmbed.stop",
+    "onCommand:hermesEmbed.configure"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "hermesChat.launch",
-        "title": "Hermes: 启动并在浏览器打开"
+        "command": "hermesEmbed.open",
+        "title": "Hermes Embed: 在 VS Code 内嵌打开"
       },
       {
-        "command": "hermesChat.stop",
-        "title": "Hermes: 停止运行时"
+        "command": "hermesEmbed.launch",
+        "title": "Hermes Embed: 启动运行时"
       },
       {
-        "command": "hermesChat.restart",
-        "title": "Hermes: 重启运行时"
+        "command": "hermesEmbed.stop",
+        "title": "Hermes Embed: 停止本扩展启动的运行时"
       },
       {
-        "command": "hermesChat.openInBrowser",
-        "title": "Hermes: 在浏览器打开"
+        "command": "hermesEmbed.openInBrowser",
+        "title": "Hermes Embed: 在浏览器打开"
       },
       {
-        "command": "hermesChat.copyAddress",
-        "title": "Hermes: 复制固定地址"
+        "command": "hermesEmbed.copyAddress",
+        "title": "Hermes Embed: 复制固定地址"
       },
       {
-        "command": "hermesChat.upgrade",
-        "title": "Hermes: 升级 dsh"
-      },
-      {
-        "command": "hermesChat.configure",
-        "title": "Hermes: Configure Harness"
+        "command": "hermesEmbed.configure",
+        "title": "Hermes Embed: 设置"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "hermes",
-          "title": "Hermes",
+          "id": "hermesEmbed",
+          "title": "Hermes Embed",
           "icon": "media/hermes.svg"
         }
       ]
     },
     "views": {
-      "hermes": [
+      "hermesEmbed": [
         {
-          "id": "hermesLauncher",
-          "name": "Harness 启动器"
+          "id": "hermesEmbedLauncher",
+          "name": "内嵌承载（实验）"
         }
       ]
     },
     "configuration": {
-      "title": "Hermes Chat",
+      "title": "Hermes Embed（实验）",
       "properties": {
-        "hermesChat.webPort": {
+        "hermesEmbed.webPort": {
           "type": "number",
           "default": 18431,
-          "description": "dsh web 固定端口。浏览器认证 cookie 绑定主机名+端口，固定端口才能长期收藏 http://127.0.0.1:<端口>。0 = OS 随机（不推荐）。"
+          "description": "目标 dsh web 端口。默认与正式版 Hermes Chat 相同（18431），以便直接附着到已在运行的运行时；检测到已有实例时本扩展不会重复启动。"
         },
-        "hermesChat.webHost": {
+        "hermesEmbed.webHost": {
           "type": "string",
           "default": "127.0.0.1",
-          "description": "dsh web 绑定地址。保持 127.0.0.1（WSL2 localhost 转发直达 Windows）；0.0.0.0 会暴露到局域网，谨慎使用。"
+          "description": "dsh web 绑定地址。保持 127.0.0.1（WSL2 localhost 转发直达 Windows）。"
         },
-        "hermesChat.runtime": {
+        "hermesEmbed.proxyPort": {
+          "type": "number",
+          "default": 18432,
+          "description": "内嵌承载用的本地反向代理端口。只监听 127.0.0.1，仅用于给内嵌窗口补齐认证，不改变浏览器侧行为。0 = 系统随机分配。"
+        },
+        "hermesEmbed.runtime": {
           "type": "string",
           "enum": [
             "auto",
@@ -93,20 +93,15 @@
           "default": "auto",
           "description": "在哪里运行 dsh web：Windows 宿主经 wsl.exe，或本机（Remote-WSL 扩展宿主）。"
         },
-        "hermesChat.wslDistribution": {
+        "hermesEmbed.wslDistribution": {
           "type": "string",
           "default": "",
           "description": "WSL 发行版名。留空使用默认发行版。"
         },
-        "hermesChat.dshPath": {
+        "hermesEmbed.dshPath": {
           "type": "string",
           "default": "",
           "description": "dsh 路径（运行时侧视角）。留空自动探测：PATH 里的 dsh，或 ~/.nvm/versions/node/*/bin/dsh 中最新版本。"
-        },
-        "hermesChat.dshPackage": {
-          "type": "string",
-          "default": "@deepseek-ai/dsh@latest",
-          "description": "升级按钮通过 npm -g 安装的包（可改为固定版本号）。"
         }
       }
     }

@@ -8,3 +8,7 @@ src/
 docs/
 .vscode/
 out/src/
+.pi/
+tsconfig.json
+.gitignore
+package-lock.json
